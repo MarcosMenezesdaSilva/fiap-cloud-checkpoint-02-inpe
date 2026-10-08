@@ -3,10 +3,27 @@ name: provision-mysql-queimadas
 
 on:
   workflow_dispatch:
+    inputs:
+      operacao:
+        description: "Operacao Terraform"
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+      confirmacao:
+        description: "Para aplicar, digite CRIAR-MYSQL"
+        required: false
+        type: string
 
 permissions:
   id-token: write
   contents: read
+
+concurrency:
+  group: terraform-mysql-queimadas
+  cancel-in-progress: false
 
 env:
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -14,14 +31,13 @@ env:
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   ARM_USE_OIDC: "true"
   ARM_USE_AZUREAD: "true"
-
   TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
 
 jobs:
   terraform:
-    name: Validar infraestrutura MySQL
+    name: Terraform MySQL Azure
     runs-on: ubuntu-latest
 
     defaults:
@@ -31,6 +47,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validar confirmacao de Apply
+        if: inputs.operacao == 'apply'
+        env:
+          CONFIRMACAO: ${{ inputs.confirmacao }}
+        run: |
+          if [ "$CONFIRMACAO" != "CRIAR-MYSQL" ]; then
+            echo "::error::Confirmacao invalida."
+            exit 1
+          fi
 
       - name: Azure Login OIDC
         uses: azure/login@v2
@@ -49,4 +75,20 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -no-color -input=false
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -out=tfplan
+
+      - name: Terraform Apply
+        if: inputs.operacao == 'apply'
+        run: terraform apply -input=false tfplan
+
+      - name: Exibir resultados
+        if: inputs.operacao == 'apply'
+        run: |
+          terraform output mysql_server_name
+          terraform output mysql_fqdn
+          terraform output database_name
+          terraform output resource_group_name
