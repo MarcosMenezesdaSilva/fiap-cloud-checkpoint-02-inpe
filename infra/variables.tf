@@ -36,7 +36,7 @@ variable "location" {
 variable "mysql_location" {
   type        = string
   description = "Regiao do MySQL Flexible Server"
-  default     = "brazilsoutheast"
+  default     = "eastus"
 }
 
 
